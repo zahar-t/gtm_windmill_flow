@@ -1,0 +1,24 @@
+# Secrets — never commit real credentials (only .env.example is tracked)
+.env
+.env.*
+!.env.example
+
+# Third-party reference repos (read locally; not published)
+vendor/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Pipeline scratch / local logs (keep the dir, ignore generated daily logs)
+logs/daily_*.json
+pipeline/queue.json

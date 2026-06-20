@@ -1,0 +1,85 @@
+# GTM Engine — local Windmill (self-hosted) so you can SEE and run the DAG.
+# Brings up Postgres + a Windmill server (UI/API) + one worker.
+#
+#   docker compose up -d            # or:  make windmill
+#   open http://localhost:8000      # login: admin@windmill.dev / changeme
+#   docker compose logs -f windmill_server
+#   docker compose down             # add -v to also wipe the DB volume
+#
+# Trimmed from windmill-labs/windmill/docker-compose.yml: dropped the native
+# worker, indexer, LSP/Multiplayer extras, and the Caddy reverse proxy (we expose
+# the server port directly for local use). Pull those back from the upstream
+# compose if you want TLS / SMTP / editor LSP.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "10"
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: windmill
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  windmill_server:
+    image: ${WM_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://postgres:changeme@db/windmill?sslmode=disable
+      - MODE=server
+      - BASE_URL=http://localhost:8000
+    logging: *default-logging
+
+  windmill_worker:
+    image: ${WM_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://postgres:changeme@db/windmill?sslmode=disable
+      - MODE=worker
+      - WORKER_GROUP=default
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - worker_dependency_cache:/tmp/windmill/cache
+      # This repo -> /gtm-engine so the flow's rawscripts (`from scripts... import`)
+      # resolve. Windmill runs jobs under its own downloaded py_runtime with a
+      # cleared PYTHONPATH, so we drop a .pth into each runtime's site-packages
+      # (which IS on sys.path); a loop re-drops it across recreates/upgrades.
+      - ./:/gtm-engine:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        ( while true; do
+            for d in /tmp/windmill/cache/py_runtime/*/lib/python*/site-packages; do
+              [ -d "$$d" ] && echo /gtm-engine > "$$d/gtm-engine.pth" 2>/dev/null
+            done
+            sleep 30
+          done ) &
+        exec windmill
+    logging: *default-logging
+
+volumes:
+  db_data:
+  worker_dependency_cache:

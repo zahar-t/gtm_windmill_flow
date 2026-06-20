@@ -1,0 +1,15 @@
+# GTM Engine pipeline — runtime deps (kept light; httpx for all vendor APIs)
+httpx==0.28.1
+python-dotenv==1.2.2
+anthropic==0.109.2     # Claude API (ICP scoring + email drafting); has output_config structured outputs
+pydantic==2.13.4       # typed node contracts (already transitive via anthropic; pinned to the Windmill lock)
+sendgrid==6.11.0       # email send + open tracking
+certifi==2024.12.14    # CA bundle for SendGrid TLS on macOS
+
+scikit-learn==1.5.2    # reply-probability model (feedback loop)
+numpy==2.1.3           # transitive sklearn dep; pinned for determinism
+
+# --- dev / test ---
+pytest==8.3.4
+respx==0.22.0          # httpx request mocking
+deepeval==1.5.5        # LLM-as-judge gates (Writer + Copy-QA + reply classification)

@@ -1,0 +1,816 @@
+{
+  "path": "f/daily/gtm_pipeline",
+  "summary": "GTM Engine - unified GTM flow (three triggers): webhook visitor | 8am cron cold lead gen (Exa, Apify, missed-webhook) | 20-min Unipile LinkedIn-engagement poll; all converge at enrich -> score -> personalize -> Instantly send -> CRM",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "icp_query": {
+        "type": "string",
+        "description": "Exa ICP search query for intake",
+        "default": "Series A to C B2B SaaS companies, 50-500 employees, recently funded or hiring"
+      },
+      "intake_limit": {
+        "type": "integer",
+        "description": "Max leads per intake source",
+        "default": 10
+      },
+      "event": {
+        "type": "object",
+        "description": "Webhook trigger: raw inbound visitor event payload (absent on the 8am cron run)"
+      },
+      "source": {
+        "type": "string",
+        "default": "website_visitor",
+        "description": "Webhook trigger: website_visitor | linkedin_visitor"
+      },
+      "mode": {
+        "type": "string",
+        "description": "Poll mode: unipile_engagement | funding_poll (else 8am cold gen)"
+      },
+      "funding_event": {
+        "type": "object",
+        "description": "Funding webhook trigger: normalized funding event {company,domain,amount_eur,round,announced_at,investors,country}"
+      },
+      "funding_lookback_days": {
+        "type": "integer",
+        "description": "Days to look back for funding rounds (funding_poll mode)",
+        "default": 7
+      }
+    },
+    "required": [],
+    "order": [
+      "icp_query",
+      "intake_limit",
+      "event",
+      "source",
+      "mode",
+      "funding_event",
+      "funding_lookback_days"
+    ]
+  },
+  "value": {
+    "modules": [
+      {
+        "id": "postmaster_check",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email import postmaster\n\ndef main(event: dict = None):\n    # Webhook (one inbound visitor): read the CACHED reputation verdict - a\n    # live pull + Slack alert per event would be heavy and noisy. Scheduled\n    # 8am batch: pull fresh and flag failing domains before any send rides on it.\n    return postmaster.latest_verdict() if event else postmaster.main()\n",
+          "language": "python3",
+          "input_transforms": {
+            "event": {
+              "expr": "flow_input.event",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Postmaster - batch: pull reputation FIRST + flag failing domains; webhook: cached verdict"
+      },
+      {
+        "id": "intake",
+        "value": {
+          "type": "branchone",
+          "branches": [
+            {
+              "summary": "Funding webhook trigger - one funding event straight to enrich (realtime)",
+              "expr": "flow_input.funding_event != null",
+              "modules": [
+                {
+                  "id": "intake_funding_webhook",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n# Map a single funding webhook event to [lead] using the same\n# field mapping as intake/funding.py. realtime_funding.py is the\n# standalone single-process entry; this branch feeds the shared flow.\nfrom scripts.intake.funding import main as run_batch\nfrom datetime import date\n\ndef main(funding_event: dict = None):\n    if not funding_event:\n        return []\n    # Normalize to the same shape as funding.recent_rounds() then reuse batch mapper\n    normalized = {\n        'company': funding_event.get('company'),\n        'domain': funding_event.get('domain'),\n        'amount_eur': funding_event.get('amount_eur') or funding_event.get('funding_amount_eur'),\n        'round': funding_event.get('round') or funding_event.get('funding_round'),\n        'announced_at': funding_event.get('announced_at') or funding_event.get('funding_announced_at'),\n        'investors': funding_event.get('investors', []),\n        'country': funding_event.get('country'),\n    }\n    # Patch funding module to return our single record\n    import scripts.common.funding as _f\n    _orig = _f.recent_rounds\n    _f.recent_rounds = lambda **kw: [normalized]\n    try:\n        return run_batch(since_days=1, limit=1)\n    finally:\n        _f.recent_rounds = _orig\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "funding_event": {
+                        "expr": "flow_input.funding_event",
+                        "type": "javascript"
+                      }
+                    }
+                  },
+                  "summary": "Funding webhook - map one funding event to [lead]"
+                }
+              ]
+            },
+            {
+              "summary": "Funding poll - near-realtime batch from funding feed (every 30min)",
+              "expr": "flow_input.mode == \"funding_poll\"",
+              "modules": [
+                {
+                  "id": "intake_funding_poll",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\nfrom scripts.intake.funding import main as run\n\ndef main(since_days: int = 7, limit: int = 25):\n    return run(since_days=since_days, limit=limit)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "since_days": {
+                        "expr": "flow_input.funding_lookback_days || 7",
+                        "type": "javascript"
+                      },
+                      "limit": {
+                        "expr": "flow_input.intake_limit",
+                        "type": "javascript"
+                      }
+                    }
+                  },
+                  "summary": "Funding poll - pull recent rounds -> [leads]"
+                }
+              ]
+            },
+            {
+              "summary": "Webhook trigger - one inbound visitor straight to enrich",
+              "expr": "flow_input.event != null",
+              "modules": [
+                {
+                  "id": "intake_webhook",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\nfrom scripts.intake.webhook_visitor import main as run\n\ndef main(event: dict = None, source: str = \"website_visitor\"):\n    return run(event, source)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "event": {
+                        "expr": "flow_input.event",
+                        "type": "javascript"
+                      },
+                      "source": {
+                        "expr": "flow_input.source",
+                        "type": "javascript"
+                      }
+                    }
+                  },
+                  "summary": "Webhook - map one visitor event to [lead]"
+                }
+              ]
+            },
+            {
+              "summary": "Unipile poll - warm LinkedIn engagement (viewers + reactors/commenters)",
+              "expr": "flow_input.mode == \"unipile_engagement\"",
+              "modules": [
+                {
+                  "id": "intake_unipile",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\nfrom scripts.intake.unipile_engagement import main as run\n\ndef main(limit: int = 50):\n    return run(limit)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "limit": {
+                        "expr": "flow_input.unipile_limit || 50",
+                        "type": "javascript"
+                      }
+                    }
+                  },
+                  "summary": "Unipile - pull profile viewers + post reactions/comments -> [leads]"
+                }
+              ]
+            }
+          ],
+          "default": [
+            {
+              "id": "cold_sources",
+              "value": {
+                "type": "branchall",
+                "branches": [
+                  {
+                    "expr": "",
+                    "modules": [
+                      {
+                        "id": "cold_exa",
+                        "value": {
+                          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                          "type": "rawscript",
+                          "content": "#requirements:\n#httpx\nfrom scripts.intake.web_search import main as run\n\ndef main(icp_query: str = \"\", limit: int = 10):\n    return run(icp_query, limit)\n",
+                          "language": "python3",
+                          "input_transforms": {
+                            "icp_query": {
+                              "expr": "flow_input.icp_query",
+                              "type": "javascript"
+                            },
+                            "limit": {
+                              "expr": "flow_input.intake_limit",
+                              "type": "javascript"
+                            }
+                          }
+                        },
+                        "summary": "Exa - neural ICP discovery"
+                      }
+                    ],
+                    "summary": "Exa discovery",
+                    "parallel": true,
+                    "skip_failure": true
+                  },
+                  {
+                    "expr": "",
+                    "modules": [
+                      {
+                        "id": "cold_apify",
+                        "value": {
+                          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                          "type": "rawscript",
+                          "content": "#requirements:\n#httpx\nfrom scripts.intake.apify_cold import main as run\n\ndef main(query: str = \"\", limit: int = 10):\n    return run(query, limit)\n",
+                          "language": "python3",
+                          "input_transforms": {
+                            "query": {
+                              "expr": "flow_input.icp_query",
+                              "type": "javascript"
+                            },
+                            "limit": {
+                              "expr": "flow_input.intake_limit",
+                              "type": "javascript"
+                            }
+                          }
+                        },
+                        "summary": "Apify - LinkedIn search scrape"
+                      }
+                    ],
+                    "summary": "Apify LinkedIn search",
+                    "parallel": true,
+                    "skip_failure": true
+                  },
+                  {
+                    "expr": "",
+                    "modules": [
+                      {
+                        "id": "cold_funding",
+                        "value": {
+                          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                          "type": "rawscript",
+                          "content": "#requirements:\n#httpx\n# PRIMARY funding source — runs alongside Exa/Apify (backfill).\n# No CRUNCHBASE_API_KEY -> [] (smoke-safe).\nfrom scripts.intake.funding import main as run\n\ndef main(since_days: int = 7, limit: int = 25):\n    return run(since_days=since_days, limit=limit)\n",
+                          "language": "python3",
+                          "input_transforms": {
+                            "since_days": {
+                              "expr": "flow_input.funding_lookback_days || 7",
+                              "type": "javascript"
+                            },
+                            "limit": {
+                              "expr": "flow_input.intake_limit",
+                              "type": "javascript"
+                            }
+                          }
+                        },
+                        "summary": "Funding feed - PRIMARY cold source (Crunchbase/dealroom/sifted)"
+                      }
+                    ],
+                    "summary": "Funding feed (PRIMARY)",
+                    "parallel": true,
+                    "skip_failure": true
+                  },
+                  {
+                    "expr": "",
+                    "modules": [
+                      {
+                        "id": "cold_missed_webhook",
+                        "value": {
+                          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                          "type": "rawscript",
+                          "content": "#requirements:\n#httpx\nfrom scripts.intake import website_visitors, linkedin_visitors\n\ndef main(limit: int = 100):\n    # 'Missed-webhook' backfill: drain any visitor events the real-time\n    # webhook did not catch (source down, retry, etc.).\n    return website_visitors.main(limit) + linkedin_visitors.main(limit)\n",
+                          "language": "python3",
+                          "input_transforms": {
+                            "limit": {
+                              "type": "static",
+                              "value": 100
+                            }
+                          }
+                        },
+                        "summary": "Missed-webhook - drain website + LinkedIn visitor tables"
+                      }
+                    ],
+                    "summary": "Missed-webhook visitors",
+                    "parallel": true,
+                    "skip_failure": true
+                  }
+                ],
+                "parallel": true
+              },
+              "summary": "Cold lead generation - Exa, Apify LinkedIn, missed-webhook visitors (parallel)"
+            },
+            {
+              "id": "cold_merge",
+              "value": {
+                "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                "type": "rawscript",
+                "content": "#requirements:\n#httpx\ndef main(branches: list = None):\n    out = []\n    for b in (branches or []):\n        if isinstance(b, list):\n            out += b\n    return out\n",
+                "language": "python3",
+                "input_transforms": {
+                  "branches": {
+                    "expr": "results.cold_sources",
+                    "type": "javascript"
+                  }
+                }
+              },
+              "summary": "Cold gen - merge Exa + Apify + missed-webhook leads"
+            }
+          ]
+        },
+        "summary": "Intake - trigger-routed: webhook visitor to enrich | 8am to cold lead generation"
+      },
+      {
+        "id": "enrich_parallel",
+        "value": {
+          "type": "branchall",
+          "branches": [
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "enrich_waterfall",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.waterfall import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.intake",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Email waterfall",
+              "parallel": true,
+              "skip_failure": true
+            },
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "enrich_signals",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.signals import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.intake",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Signals (Exa 7d)",
+              "parallel": true,
+              "skip_failure": true
+            },
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "enrich_company",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.company import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.intake",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Company (Clearbit/Proxycurl)",
+              "parallel": true,
+              "skip_failure": true
+            }
+          ],
+          "parallel": true
+        },
+        "summary": "Enrich \u2014 dimensions (parallel)"
+      },
+      {
+        "id": "enrich_merge",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
+          "language": "python3",
+          "input_transforms": {
+            "branches": {
+              "expr": "results.enrich_parallel",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Enrich \u2014 merge dimensions"
+      },
+      {
+        "id": "score_icp",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.score.icp import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.enrich_merge",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Score \u2014 Claude ICP fit 0\u2013100 + reasoning"
+      },
+      {
+        "id": "score_priority",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\nfrom scripts.score.priority import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.score_icp",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Score \u2014 intent_score + priority (funding recency \u00d7 round-size dominate)"
+      },
+      {
+        "id": "crm_dedup",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.dedup import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.score_priority",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "CRM \u2014 dedup vs Supabase (skip if contacted <30d)"
+      },
+      {
+        "id": "score_route",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.score.route import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.crm_dedup",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Score \u2014 route hot(>70+signal)/warm/cold(<40)"
+      },
+      {
+        "id": "score_validate",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n# Email validation (node 9) \u2014 verify hot/warm deliverability before drafting.\n# Closes flow/runner parity gap: runner has this step, flow previously lacked it.\nfrom scripts.email.validate import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.score_route",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Score \u2014 email validate (node 9, deliverability before drafting)"
+      },
+      {
+        "id": "score_channel",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n# Channel router: investor_intro | linkedin | email.\n# Pure function; sets lead['channel'] and lead['lead_investor'].\nfrom scripts.score.channel import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.score_validate",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Score \u2014 channel router (investor_intro | linkedin | email)"
+      },
+      {
+        "id": "personalize_parallel",
+        "value": {
+          "type": "branchall",
+          "branches": [
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "personalize_hot",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.personalize.hot import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.score_channel",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Hot (seq A)",
+              "parallel": true,
+              "skip_failure": true
+            },
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "personalize_warm",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.personalize.warm import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.score_channel",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Warm (seq B)",
+              "parallel": true,
+              "skip_failure": true
+            }
+          ],
+          "parallel": true
+        },
+        "summary": "Personalize \u2014 hot + warm (parallel)"
+      },
+      {
+        "id": "personalize_merge",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
+          "language": "python3",
+          "input_transforms": {
+            "branches": {
+              "expr": "results.personalize_parallel",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Personalize \u2014 merge hot + warm drafts"
+      },
+      {
+        "id": "load_lifecycle",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\nfrom scripts.crm.lifecycle import main as run\n\ndef main(event: dict = None, mode: str = None):\n    # Follow-up re-injection is a batch (8am) concern. The real-time entries \u2014\n    # the webhook visitor (event) and the Unipile engagement poll (mode) \u2014 must\n    # not drag the whole follow-up queue into their send.\n    return [] if (event or mode) else run()\n",
+          "language": "python3",
+          "input_transforms": {
+            "event": {
+              "expr": "flow_input.event",
+              "type": "javascript"
+            },
+            "mode": {
+              "expr": "flow_input.mode",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Lifecycle - batch only: load follow-up-due leads (webhook + poll skip)"
+      },
+      {
+        "id": "personalize_followup",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.personalize.followup import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.load_lifecycle",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Personalize \u2014 follow-up touch (sequence F)"
+      },
+      {
+        "id": "send_merge",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\ndef main(new: list = None, followup: list = None):\n    return (new or []) + (followup or [])\n",
+          "language": "python3",
+          "input_transforms": {
+            "new": {
+              "expr": "results.personalize_merge",
+              "type": "javascript"
+            },
+            "followup": {
+              "expr": "results.personalize_followup",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Merge new + follow-up leads into the send batch"
+      },
+      {
+        "id": "spam_score",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\nfrom scripts.email.spam_score import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.send_merge",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Email \u2014 spam-content score (hold risky copy before send)"
+      },
+      {
+        "id": "email_send",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email.send import main as run\n\ndef main(leads: list = None, reputation: dict = None):\n    return run(leads, reputation)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.spam_score",
+              "type": "javascript"
+            },
+            "reputation": {
+              "expr": "results.postmaster_check",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Email \u2014 Instantly campaign send (warmup \u00d7 reputation)"
+      },
+      {
+        "id": "email_log",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email.log import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.email_send",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Email \u2014 log sent_at, subject, score, source"
+      },
+      {
+        "id": "crm_upsert",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.upsert import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.email_log",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "CRM \u2014 upsert leads + stage + activity"
+      },
+      {
+        "id": "crm_finalize",
+        "value": {
+          "type": "branchall",
+          "branches": [
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "crm_handoff",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.handoff import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.crm_upsert",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Slack handoff (hot)",
+              "parallel": true,
+              "skip_failure": true
+            },
+            {
+              "expr": "",
+              "modules": [
+                {
+                  "id": "report_daily_summary",
+                  "value": {
+                    "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+                    "type": "rawscript",
+                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.report.daily_summary import main as run\n\ndef main(leads: list = None):\n    leads = leads or []\n    found = len(leads)\n    enriched = sum(1 for l in leads if l.get('email') or l.get('signal') or l.get('company_size'))\n    sent = sum(1 for l in leads if l.get('stage') == 'contacted')\n    queued = sum(1 for l in leads if l.get('stage') == 'warm')\n    return run(found=found, enriched=enriched, sent=sent, queued=queued)\n",
+                    "language": "python3",
+                    "input_transforms": {
+                      "leads": {
+                        "expr": "results.crm_upsert",
+                        "type": "javascript"
+                      }
+                    }
+                  }
+                }
+              ],
+              "summary": "Daily summary",
+              "parallel": true,
+              "skip_failure": true
+            }
+          ],
+          "parallel": true
+        },
+        "summary": "CRM \u2014 handoff + report (parallel)"
+      }
+    ]
+  },
+  "schedule": {
+    "cron": "0 8 * * *",
+    "timezone": "UTC",
+    "enabled": true,
+    "args": {
+      "intake_limit": 10
+    }
+  },
+  "triggers": {
+    "_comment": "Four triggers, ONE flow. The `intake` branchone routes on flow_input: funding_event -> funding webhook; mode=funding_poll -> funding poll; event -> visitor webhook; default -> 8am cold gen (Exa+Apify+funding feed+missed-webhook). All converge at enrich_parallel.",
+    "schedule_8am": {
+      "type": "cron",
+      "cron": "0 8 * * *",
+      "timezone": "UTC",
+      "routes_to": "cold lead generation (funding PRIMARY + Exa/Apify backfill + missed-webhook drain)",
+      "args": {
+        "intake_limit": 10
+      }
+    },
+    "schedule_funding_poll": {
+      "type": "cron",
+      "cron": "*/30 * * * *",
+      "timezone": "UTC",
+      "routes_to": "funding poll branch (near-realtime funding intake)",
+      "args": {
+        "mode": "funding_poll",
+        "funding_lookback_days": 1
+      }
+    },
+    "webhook": {
+      "type": "http",
+      "note": "Windmill auto-exposes this flow at its run webhook URL; point the visitor source (RB2B / LinkedIn) at it, or attach an HTTP-route trigger.",
+      "routes_to": "straight to enrich (one inbound visitor)",
+      "sample_body": {
+        "event": {
+          "email": "dana@acme.com",
+          "name": "Dana Reis",
+          "company": "Acme",
+          "linkedin_url": "https://linkedin.com/in/dana"
+        },
+        "source": "linkedin_visitor"
+      }
+    },
+    "webhook_funding": {
+      "type": "http",
+      "note": "Point a funding-feed webhook or Zapier at the run URL with funding_event payload. Routes to intake_funding_webhook branch -> straight to enrich. realtime_funding.py is the standalone single-process alternative.",
+      "routes_to": "funding webhook branch (one funding event, real-time)",
+      "sample_body": {
+        "funding_event": {
+          "company": "Acme AI",
+          "domain": "acme.example",
+          "amount_eur": 5000000,
+          "round": "series_a",
+          "announced_at": "2026-06-20",
+          "investors": ["Top Fund"],
+          "country": "DE"
+        }
+      }
+    }
+  }
+}

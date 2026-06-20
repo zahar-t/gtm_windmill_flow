@@ -1,0 +1,9 @@
+# Runtime-only deps for the pipeline container (the daily/realtime funnel).
+# The dev/test stack (pytest, respx, deepeval) and the feedback model
+# (scikit-learn, numpy) are NOT here — install requirements.txt for those.
+httpx==0.28.1
+python-dotenv==1.2.2
+anthropic==0.109.2
+pydantic==2.13.4
+certifi==2024.12.14
+sendgrid==6.11.0   # legacy: postmaster reputation telemetry only (removed in Step 7)

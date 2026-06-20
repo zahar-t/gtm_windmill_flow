@@ -1,0 +1,26 @@
+{
+  "summary": "Feedback loop — outcome poller",
+  "description": "Drains email outcomes (Instantly analytics + reply webhook) into leads.outcome. Separate from the daily 8am pipeline. Recommended schedule: hourly (0 * * * *). No-op unless ENABLE_FEEDBACK_LOOP=true.",
+  "value": {
+    "modules": [
+      {
+        "id": "poll",
+        "summary": "Run feedback outcome poller",
+        "value": {
+          "type": "rawscript",
+          "language": "python3",
+          "input_transforms": {
+            "action": { "type": "static", "value": "poll" }
+          },
+          "content": "# Thin wrapper so Windmill can schedule the feedback runner.\n# Assumes the `scripts` package is on PYTHONPATH in the worker bundle\n# (same assumption as every other GTM Engine stage).\nfrom scripts.feedback.run import main as run\n\n\ndef main(action: str = \"poll\"):\n    return run(action)\n"
+        }
+      }
+    ]
+  },
+  "schedule": {
+    "cron": "0 * * * *",
+    "timezone": "UTC",
+    "enabled": false,
+    "args": { "action": "poll" }
+  }
+}

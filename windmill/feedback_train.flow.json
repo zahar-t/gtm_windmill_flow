@@ -1,0 +1,26 @@
+{
+  "summary": "Feedback loop — weekly model training",
+  "description": "Retrains the reply-probability model from labelled outcomes and persists it to the models table (is_active=true). Runs weekly on Monday after the warmup reset. No-op until >=50 labelled outcomes exist, or unless ENABLE_FEEDBACK_LOOP=true.",
+  "value": {
+    "modules": [
+      {
+        "id": "train",
+        "summary": "Retrain + persist reply-probability model",
+        "value": {
+          "type": "rawscript",
+          "language": "python3",
+          "input_transforms": {
+            "action": { "type": "static", "value": "train" }
+          },
+          "content": "# Thin wrapper so Windmill can schedule the feedback runner.\n# Assumes the `scripts` package is on PYTHONPATH in the worker bundle\n# (same assumption as every other GTM Engine stage).\nfrom scripts.feedback.run import main as run\n\n\ndef main(action: str = \"train\"):\n    return run(action)\n"
+        }
+      }
+    ]
+  },
+  "schedule": {
+    "cron": "0 9 * * 1",
+    "timezone": "UTC",
+    "enabled": false,
+    "args": { "action": "train" }
+  }
+}
