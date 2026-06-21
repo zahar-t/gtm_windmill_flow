@@ -40,6 +40,7 @@ from scripts.common import config
 from scripts.common import supabase
 from scripts.common import log as common_log
 from scripts.common import instantly
+from scripts.common import node
 from scripts.email import warmup_check
 from scripts.email import postmaster
 from scripts.email import spam_score
@@ -245,7 +246,10 @@ def main(leads: list[dict] | None = None, reputation: dict | None = None) -> lis
     skipped = 0
     held = 0
 
-    for lead in leads:
+    # Re-rank: highest-priority first so a late high-priority lead is never starved
+    # by earlier low-priority ones hitting the cap first (stable sort preserves
+    # arrival order on ties — the priority flywheel realized at the send chokepoint).
+    for lead in sorted(leads, key=lambda l: -(l.get("priority") or 0.0)):
         if lead.get("stage") not in sendable_stages:
             skipped += 1
             continue
@@ -331,8 +335,12 @@ def main(leads: list[dict] | None = None, reputation: dict | None = None) -> lis
             sent += 1
             if _crm_enabled():
                 _confirm_sent(lead, now_iso, instantly_lead_id)
+            node.record_run("email/send", lead, node.STATUS_PASSED)        # QA evidence
         elif _crm_enabled():
             _revert_claim(email)              # release the claim so a retry can happen
+            node.dead_letter("email/send", node.SEND_FAILED, lead,         # QA evidence
+                             detail="; ".join(lead.get("_errors", [])[-3:]) or "send failed")
+            node.record_run("email/send", lead, node.STATUS_QUARANTINED)   # QA evidence
 
     # 4. Bump warmup sends_count in Supabase
     if sent > 0 and config.SUPABASE_URL and config.SUPABASE_KEY:

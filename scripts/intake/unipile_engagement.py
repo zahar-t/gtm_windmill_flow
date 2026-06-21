@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.common import config, log, unipile
+from scripts.common import config, log, node, unipile
 
 # Profile viewers reuse the existing "visited our LinkedIn page" semantics;
 # reactors/commenters get a distinct source so engagement is queryable on its own.
@@ -82,6 +82,14 @@ def main(limit: int = 50) -> list[dict[str, Any]]:
     seen: set[str] = set()
     counts = {"viewer": 0, "reaction": 0, "comment": 0}
 
+    def _emit(lead: dict[str, Any]) -> None:
+        if node.has_identity(lead):
+            leads.append(lead)
+        else:
+            node.dead_letter("intake/unipile_engagement", node.NO_IDENTITY, lead,
+                             detail="no email/linkedin/domain")
+            node.record_run("intake/unipile_engagement", lead, node.STATUS_QUARANTINED)
+
     try:
         # Engagers first (stronger intent than a passive profile view), then
         # viewers — dedup keeps the first/strongest signal per person.
@@ -95,7 +103,7 @@ def main(limit: int = 50) -> list[dict[str, Any]]:
             if k:
                 seen.add(k)
             counts[p.get("_kind", "reaction")] = counts.get(p.get("_kind", "reaction"), 0) + 1
-            leads.append(_to_lead(p))
+            _emit(_to_lead(p))
     except Exception:
         leads = []
 

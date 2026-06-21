@@ -110,11 +110,8 @@ INSTANTLY_BASE_URL = get("INSTANTLY_BASE_URL", "https://api.instantly.ai/api/v2"
 INSTANTLY_CAMPAIGN_ID = get("INSTANTLY_CAMPAIGN_ID")   # target campaign for sends
 # From-identity used for labels/domain fallback (Instantly sets the real sender
 # per connected mailbox; this is just our default + reputation-domain hint).
-SENDGRID_FROM_EMAIL = get("SENDGRID_FROM_EMAIL", "outbound@example.com")
-SENDGRID_FROM_NAME = get("SENDGRID_FROM_NAME", "GTM Engine")
-# Legacy SendGrid key — retained only for back-compat; the cold pipeline no
-# longer sends/tracks through SendGrid.
-SENDGRID_API_KEY = get("SENDGRID_API_KEY")
+FROM_EMAIL = get("FROM_EMAIL", "outbound@example.com")
+FROM_NAME = get("FROM_NAME", "GTM Engine")
 
 # ---------- Notifications ----------
 SLACK_WEBHOOK_URL = get("SLACK_WEBHOOK_URL")
@@ -130,7 +127,7 @@ ICP_QUERY = get(
 )
 
 # ---------- Open-pixel tracking (optional) ----------
-SENDGRID_TRACK_URL = get("SENDGRID_TRACK_URL", "")
+TRACK_URL = get("TRACK_URL", "")
 
 # ---------- Feedback loop (reply-probability model) ----------
 ENABLE_FEEDBACK_LOOP = get("ENABLE_FEEDBACK_LOOP", "false").lower() == "true"

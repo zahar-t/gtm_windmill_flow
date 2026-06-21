@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.common import config, http, log
+from scripts.common import config, http, log, node
 
 _APIFY_BASE = "https://api.apify.com/v2/acts"
 
@@ -93,12 +93,21 @@ def main(query: str = "", limit: int = 10) -> list[dict[str, Any]]:
     n = max(0, int(limit or 0))
 
     leads: list[dict[str, Any]] = []
+
+    def _emit(lead: dict[str, Any]) -> None:
+        if node.has_identity(lead):
+            leads.append(lead)
+        else:
+            node.dead_letter("intake/apify_cold", node.NO_IDENTITY, lead,
+                             detail="no email/linkedin/domain")
+            node.record_run("intake/apify_cold", lead, node.STATUS_QUARANTINED)
+
     try:
         for hit in _search(q, n):
             try:
-                leads.append(_lead_from_hit(hit))
+                _emit(_lead_from_hit(hit))
             except Exception as exc:
-                leads.append({
+                _emit({
                     "name": None, "company": None, "company_url": None, "domain": None,
                     "title": None, "email": None, "linkedin_url": None, "country": None,
                     "source": "linkedin_search", "signal": None,

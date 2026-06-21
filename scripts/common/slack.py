@@ -81,6 +81,32 @@ def post_reply(lead: dict) -> bool:
         return False
 
 
+def post_interested_reply(lead: dict) -> bool:
+    """Highlight alert when a lead replies with clear buying interest.
+
+    Fires in addition to (and instead of) post_reply so a human can act fast.
+    Returns True on success, False otherwise.
+    """
+    if not config.SLACK_WEBHOOK_URL:
+        return False
+    try:
+        name = lead.get("name") or lead.get("email") or "A lead"
+        title = lead.get("title") or ""
+        company = lead.get("company") or ""
+        score = lead.get("icp_score")
+        text = (
+            ":star2: *INTERESTED reply — act now*\n"
+            f"*{name}*"
+            + (f" ({title})" if title else "")
+            + (f" at *{company}*" if company else "")
+            + (f"  ·  ICP {score}/100" if score is not None else "")
+            + f"\n{lead.get('email', '')}  ·  stage=replied  ·  class=interested"
+        )
+        return post(text)
+    except Exception:
+        return False
+
+
 def post_intro_request(lead: dict) -> bool:
     """Ask the team to request a warm intro via a relationship investor.
 

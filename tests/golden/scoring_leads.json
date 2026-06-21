@@ -1,0 +1,46 @@
+[
+  {
+    "_label": "high_score_us_seed_funded",
+    "company": "Northwind Labs",
+    "country": "US",
+    "company_size": 60,
+    "funding_stage": "seed",
+    "months_since_last_funding": 4,
+    "last_funding_eur": 2000000,
+    "signal": "Northwind Labs raises $2M seed round",
+    "signal_type": "funding"
+  },
+  {
+    "_label": "mid_score_gb_series_a",
+    "company": "Tagus Analytics",
+    "country": "GB",
+    "company_size": 200,
+    "funding_stage": "series_a",
+    "industry": "data analytics saas"
+  },
+  {
+    "_label": "low_score_xx_logistics",
+    "company": "FarCorp Logistics",
+    "country": "XX",
+    "industry": "logistics"
+  },
+  {
+    "_label": "dq_competitor",
+    "company": "Rival Corp",
+    "country": "US",
+    "is_competitor": true
+  },
+  {
+    "_label": "dq_enterprise_too_large",
+    "company": "BigCorp",
+    "country": "US",
+    "company_size": 8000,
+    "funding_stage": "series_c"
+  },
+  {
+    "_label": "dq_excluded_sector",
+    "company": "ResearchCo",
+    "country": "US",
+    "industry": "market research tool"
+  }
+]

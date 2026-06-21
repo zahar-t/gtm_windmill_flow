@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 
-from scripts.common import config, log
+from scripts.common import config, log, node
 
 # ---------------------------------------------------------------------------
 # Rule data
@@ -193,10 +193,15 @@ def main(leads: list[dict] | None = None) -> list[dict]:
             lead["_hold"] = "spam_risk"
             lead["held_reason"] = f"spam_score={res['score']}"
             blocked += 1
+            node.dead_letter("email/spam_score", node.SPAM_BLOCK, lead,
+                             detail=f"spam_score={res['score']}")
+            node.record_run("email/spam_score", lead, node.STATUS_QUARANTINED)
         elif res["verdict"] == "review":
             review += 1
+            node.record_run("email/spam_score", lead, node.STATUS_PASSED)  # passed gate, flagged
         else:
             ok += 1
+            node.record_run("email/spam_score", lead, node.STATUS_PASSED)
 
     try:
         log.log_stage(

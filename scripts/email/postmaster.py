@@ -231,7 +231,7 @@ def _persist_snapshot(verdict: dict) -> None:
             "domain_reputation",
             {
                 "date": verdict["date"],
-                "domain": config.POSTMASTER_DOMAIN or config.SENDGRID_FROM_EMAIL.split("@")[-1],
+                "domain": config.POSTMASTER_DOMAIN or config.FROM_EMAIL.split("@")[-1],
                 "status": verdict["status"],
                 "flagged": verdict["status"] in ("degraded", "critical"),
                 "send_multiplier": verdict["send_multiplier"],
@@ -251,7 +251,7 @@ def _alert_if_failing(verdict: dict) -> None:
     if verdict["status"] not in ("degraded", "critical"):
         return
     domain = config.POSTMASTER_DOMAIN or (
-        config.SENDGRID_FROM_EMAIL.split("@")[-1] if "@" in config.SENDGRID_FROM_EMAIL else "sending domain"
+        config.FROM_EMAIL.split("@")[-1] if "@" in config.FROM_EMAIL else "sending domain"
     )
     paused = " — SENDS PAUSED" if verdict["send_multiplier"] == 0 else ""
     try:

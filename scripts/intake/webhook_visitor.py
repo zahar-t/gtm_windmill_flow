@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.common import log
+from scripts.common import log, node
 
 _VALID_SOURCES = {"website_visitor", "linkedin_visitor"}
 
@@ -59,6 +59,16 @@ def main(event: dict | None = None, source: str = "website_visitor") -> list[dic
         "_errors": [],
         "_realtime": True,
     }
+
+    if not node.has_identity(lead):
+        node.dead_letter("intake/webhook_visitor", node.NO_IDENTITY, lead,
+                         detail="no email/linkedin/domain")
+        node.record_run("intake/webhook_visitor", lead, node.STATUS_QUARANTINED)
+        try:
+            log.log_stage("intake/webhook_visitor", {"mapped": 0, "quarantined": 1})
+        except Exception:
+            pass
+        return []
 
     try:
         log.log_stage("intake/webhook_visitor", {"mapped": 1, "source": lead["source"]})

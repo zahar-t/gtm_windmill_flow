@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.common import config, log
+from scripts.common import config, log, node
 
 # Guarded import so smoke works without creds
 try:
@@ -67,6 +67,14 @@ def main(limit: int = 100) -> list[dict[str, Any]]:
 
     leads: list[dict[str, Any]] = []
 
+    def _emit(lead: dict[str, Any]) -> None:
+        if node.has_identity(lead):
+            leads.append(lead)
+        else:
+            node.dead_letter("intake/linkedin_visitors", node.NO_IDENTITY, lead,
+                             detail="no email/linkedin/domain")
+            node.record_run("intake/linkedin_visitors", lead, node.STATUS_QUARANTINED)
+
     for row in rows:
         try:
             lead: dict[str, Any] = {
@@ -82,9 +90,10 @@ def main(limit: int = 100) -> list[dict[str, Any]]:
                 "signal": None,
                 "_errors": [],
             }
-            leads.append(lead)
 
-            # Mark row as processed
+            # Mark row as processed BEFORE emit — a quarantined visitor must
+            # still be marked processed (payload captured in dead_letter;
+            # re-draining would duplicate it).
             row_id = row.get("id")
             if row_id is not None:
                 try:
@@ -96,8 +105,10 @@ def main(limit: int = 100) -> list[dict[str, Any]]:
                 except Exception as exc:
                     lead["_errors"].append(f"mark_processed: {exc}")
 
+            _emit(lead)
+
         except Exception as exc:
-            leads.append({
+            _emit({
                 "email": None,
                 "name": None,
                 "company": None,

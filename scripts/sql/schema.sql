@@ -305,4 +305,21 @@ CREATE INDEX IF NOT EXISTS idx_ci_investor ON company_investors (investor_name);
 
 -- 7.4 pipeline_runs — value-segmented reporting columns
 ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS pipeline_value_eur DOUBLE PRECISION;
-ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS metrics            JSONB;  -- by_funding_bracket / by_segment
+ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS metrics            JSONB;  -- by_funding_bracket / by_segment / rates / llm_cost_usd
+
+-- ============================================================
+-- 8. REPLY CLASSIFICATION (migration 003)
+-- ============================================================
+
+-- leads: reply_class — deterministic keyword bucket for inbound replies
+-- Values: interested | question | not_now | ooo | unsubscribe | negative | other
+-- Written by feedback/outcomes.py (_drain_inbound) and realtime_reply.py on
+-- every reply event, using scripts/common/reply_classify.classify().
+-- unsubscribe class pairs with outcome='unsubscribe' (permanently suppressed by dedup).
+-- not_now / ooo class pairs with re_trigger_at / re_trigger_reason (nurture loop).
+-- interested class fires a dedicated Slack highlight (slack.post_interested_reply).
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS reply_class TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_leads_reply_class
+  ON leads (reply_class)
+  WHERE reply_class IS NOT NULL;

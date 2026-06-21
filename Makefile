@@ -1,5 +1,5 @@
 # GTM Engine — local dev / ops shortcuts.
-.PHONY: help windmill windmill-down windmill-logs build dry-run run-once test migrate
+.PHONY: help windmill windmill-down windmill-logs build dry-run run-once test migrate migrate-all
 
 help:   ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -31,3 +31,8 @@ test:            ## run the gate suite (Step 4 — installs dev deps first)
 
 migrate:         ## apply a migration: make migrate FILE=scripts/sql/migrations/001_node_state_and_dlq.sql
 	psql "$$SUPABASE_DB_URL" -f $(FILE)
+
+migrate-all:     ## apply all three migrations in order (001 → 002 → 003)
+	psql "$$SUPABASE_DB_URL" -f scripts/sql/migrations/001_node_state_and_dlq.sql
+	psql "$$SUPABASE_DB_URL" -f scripts/sql/migrations/002_funding_investors_channel.sql
+	psql "$$SUPABASE_DB_URL" -f scripts/sql/migrations/003_reply_class.sql

@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from scripts.common import config, log
+from scripts.common import config, log, node
 
 _30_DAYS = timedelta(days=30)
 
@@ -83,6 +83,8 @@ def main(leads: list[dict] | None = None) -> list[dict]:
             lead.setdefault("_errors", []).append(f"dedup error: {exc}")
             lead["_skip"] = True
             lead["_skip_reason"] = "dedup_unverified:db_error"
+            node.dead_letter("crm/dedup", node.DEDUP_UNVERIFIED, lead, detail=f"db_error: {exc}")
+            node.record_run("crm/dedup", lead, node.STATUS_QUARANTINED)
             skipped += 1
             continue
 

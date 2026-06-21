@@ -5,5 +5,4 @@ httpx==0.28.1
 python-dotenv==1.2.2
 anthropic==0.109.2
 pydantic==2.13.4
-certifi==2024.12.14
-sendgrid==6.11.0   # legacy: postmaster reputation telemetry only (removed in Step 7)
+certifi==2024.12.14    # CA bundle for TLS on macOS (httpx)

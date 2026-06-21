@@ -35,9 +35,11 @@ are visibly exercised end-to-end.
 from __future__ import annotations
 
 from scripts.common import config, log
+from scripts.common import claude as _claude
+from scripts.common import node as _node
 from scripts.intake import linkedin_visitors, website_visitors, web_search, apify_cold
 from scripts.intake import funding as funding_intake
-from scripts.enrich import waterfall, signals, company
+from scripts.enrich import waterfall, signals, company, completeness
 from scripts.score import icp, route
 from scripts.score import priority, channel
 from scripts.crm import dedup, upsert, handoff, lifecycle
@@ -137,6 +139,7 @@ def main(demo: bool = False, icp_query: str = "", limit: int = 10) -> dict:
     signals.main(leads)          # Exa funding/hiring/launch signals (7d)
     company.main(leads)          # Proxycurl -> Clearbit: size · industry · country
     enriched = sum(1 for l in leads if l.get("enriched_at")) or (found if demo else 0)
+    completeness.main(leads)     # gate: quarantine leads with no company AND no domain (ENRICH_INCOMPLETE)
 
     # ---- 3. SCORE — ICP rubric -> priority -> dedup(+suppress) -> route -> validate -> channel ----
     icp.main(leads)              # deterministic ICP rubric (Claude extracts inputs)
@@ -181,7 +184,18 @@ def main(demo: bool = False, icp_query: str = "", limit: int = 10) -> dict:
     counts = _count(batch)
     sent = counts["contacted"]
     queued = counts["warm"]
-    report = daily_summary.main(found=found, enriched=enriched, sent=sent, queued=queued, leads=batch)
+    llm_cost = _claude.cost_usd_total()
+    log.log_stage("run_pipeline/llm_cost", {"cost_usd": llm_cost})
+    report = daily_summary.main(
+        found=found, enriched=enriched, sent=sent, queued=queued,
+        leads=batch, llm_cost_usd=llm_cost,
+    )
+
+    # ---- DLQ alert — best-effort, after report, never raises ----
+    try:
+        _node.alert_dead_letter(run_id=_node.run_id())
+    except Exception:
+        pass
 
     summary = {
         "demo": demo,

@@ -13,6 +13,13 @@ from typing import Any
 
 from scripts.common import config, log, slack
 
+# ICP match threshold — leads with icp_score >= this count as "matched"
+ICP_MATCH_THRESHOLD = int(
+    (lambda v: v if v else "70")(
+        __import__("os").getenv("ICP_MATCH_THRESHOLD", "70")
+    )
+)
+
 
 def _today_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -99,24 +106,51 @@ def _compute_by_segment(rows: list[dict]) -> dict[str, Any]:
     return result
 
 
+def _compute_rates(
+    leads: list[dict],
+    sent: int,
+    found: int,
+    icp_threshold: int = ICP_MATCH_THRESHOLD,
+) -> dict[str, float]:
+    """Compute reply_rate, bounce_rate, icp_match_rate. All divide-by-zero safe.
+
+    reply_rate     = leads with outcome=='reply'  / sent
+    bounce_rate    = leads with outcome=='bounce' / sent
+    icp_match_rate = leads with icp_score >= icp_threshold / found
+    """
+    replies = sum(1 for l in leads if l.get("outcome") == "reply")
+    bounces = sum(1 for l in leads if l.get("outcome") == "bounce")
+    icp_matched = sum(
+        1 for l in leads
+        if (l.get("icp_score") or 0) >= icp_threshold
+    )
+    return {
+        "reply_rate": round(replies / sent, 4) if sent else 0.0,
+        "bounce_rate": round(bounces / sent, 4) if sent else 0.0,
+        "icp_match_rate": round(icp_matched / found, 4) if found else 0.0,
+    }
+
+
 def main(
     found: int = 0,
     enriched: int = 0,
     sent: int = 0,
     queued: int = 0,
     leads: list[dict] | None = None,
+    llm_cost_usd: float = 0.0,
 ) -> dict:
     """Summarise pipeline run counts, persist to pipeline_runs, notify Slack.
 
     Parameters
     ----------
-    found:    Number of leads discovered by intake scripts.
-    enriched: Number of leads that completed the enrich stage.
-    sent:     Number of emails successfully sent.
-    queued:   Number of warm leads queued for nurture sequence.
-    leads:    Optional final batch list. When passed, computes pipeline_value_eur
-              from sendable leads' deal_value_eur/funding_amount_eur, plus
-              value-segmented metrics (requires Supabase for historical rates).
+    found:        Number of leads discovered by intake scripts.
+    enriched:     Number of leads that completed the enrich stage.
+    sent:         Number of emails successfully sent.
+    queued:       Number of warm leads queued for nurture sequence.
+    leads:        Optional final batch list. When passed, computes pipeline_value_eur
+                  from sendable leads' deal_value_eur/funding_amount_eur, plus
+                  value-segmented metrics and rates.
+    llm_cost_usd: Accumulated LLM cost for this run (from claude.cost_usd_total()).
 
     Returns the counts dict regardless of DB / Slack availability.
     """
@@ -133,6 +167,7 @@ def main(
     if leads:
         pipeline_value = _compute_pipeline_value(leads)
     counts["pipeline_value_eur"] = pipeline_value
+    counts["llm_cost_usd"] = llm_cost_usd
 
     # value-segmented metrics — needs Supabase (best-effort)
     by_funding_bracket: dict[str, Any] = {}
@@ -154,6 +189,12 @@ def main(
     counts["by_funding_bracket"] = by_funding_bracket
     counts["by_segment"] = by_segment
 
+    # Rates — computed from the passed leads + run counts (no DB needed)
+    rates = _compute_rates(leads or [], sent=sent, found=found)
+    counts["reply_rate"] = rates["reply_rate"]
+    counts["bounce_rate"] = rates["bounce_rate"]
+    counts["icp_match_rate"] = rates["icp_match_rate"]
+
     # Best bracket for Slack line
     best_bracket = ""
     best_rate = 0.0
@@ -173,7 +214,14 @@ def main(
                 "emails_sent": sent,
                 "leads_queued": queued,
                 "pipeline_value_eur": pipeline_value,
-                "metrics": {"by_funding_bracket": by_funding_bracket, "by_segment": by_segment},
+                "metrics": {
+                    "by_funding_bracket": by_funding_bracket,
+                    "by_segment": by_segment,
+                    "reply_rate": rates["reply_rate"],
+                    "bounce_rate": rates["bounce_rate"],
+                    "icp_match_rate": rates["icp_match_rate"],
+                    "llm_cost_usd": llm_cost_usd,
+                },
             }
             supabase.insert("pipeline_runs", row)
         except Exception as exc:
@@ -195,11 +243,30 @@ def main(
             bracket_str = f"best bracket {best_bracket} {best_rate:.0%}" if best_bracket else ""
             from scripts.common.slack import post
             post(f":moneybag: Pipeline {val_str}" + (f" · {bracket_str}" if bracket_str else ""))
+
+        # Rates line
+        rate_parts = []
+        if sent:
+            rate_parts.append(f"reply {rates['reply_rate']:.1%}")
+            rate_parts.append(f"bounce {rates['bounce_rate']:.1%}")
+        if found:
+            rate_parts.append(f"ICP match {rates['icp_match_rate']:.1%}")
+        if rate_parts:
+            from scripts.common.slack import post
+            post(":chart_with_upwards_trend: Rates: " + "  |  ".join(rate_parts))
+
+        # LLM cost line (only when non-zero)
+        if llm_cost_usd > 0:
+            from scripts.common.slack import post
+            post(f":robot_face: LLM cost this run: ${llm_cost_usd:.4f}")
     except Exception:
         pass
 
     try:
-        log.log_stage("report/daily_summary", {k: v for k, v in counts.items() if k not in ("by_funding_bracket", "by_segment")})
+        log.log_stage("report/daily_summary", {
+            k: v for k, v in counts.items()
+            if k not in ("by_funding_bracket", "by_segment")
+        })
     except Exception:
         pass
 
@@ -218,15 +285,37 @@ if __name__ == "__main__":
     assert result["pipeline_value_eur"] == 0.0
     print(f"  keyless base: pipeline_value_eur={result['pipeline_value_eur']}  PASS")
 
-    # With leads carrying funding_amount_eur
+    # Rates present in result
+    assert "reply_rate" in result
+    assert "bounce_rate" in result
+    assert "icp_match_rate" in result
+    assert result["reply_rate"] == 0.0    # no leads with outcome='reply' passed
+    assert result["bounce_rate"] == 0.0
+    print(f"  rates present (all 0.0 when no leads): PASS")
+
+    # With leads carrying funding_amount_eur + outcomes for rate checks
     test_leads = [
-        {"stage": "hot", "funding_amount_eur": 5_000_000},
-        {"stage": "warm", "funding_amount_eur": 2_000_000},
-        {"stage": "cold", "funding_amount_eur": 10_000_000},  # excluded (cold)
+        {"stage": "hot", "funding_amount_eur": 5_000_000, "outcome": "reply", "icp_score": 80},
+        {"stage": "warm", "funding_amount_eur": 2_000_000, "outcome": None, "icp_score": 75},
+        {"stage": "cold", "funding_amount_eur": 10_000_000, "outcome": "bounce", "icp_score": 30},  # excluded from value (cold)
     ]
-    result2 = main(found=3, enriched=3, sent=0, queued=1, leads=test_leads)
+    result2 = main(found=3, enriched=3, sent=2, queued=1, leads=test_leads, llm_cost_usd=0.0042)
     assert result2["pipeline_value_eur"] == 7_000_000.0, f"expected 7M got {result2['pipeline_value_eur']}"
     print(f"  pipeline_value from leads: {result2['pipeline_value_eur']}  PASS")
+    assert result2["reply_rate"] == 0.5, f"expected 0.5 got {result2['reply_rate']}"
+    assert result2["bounce_rate"] == 0.5, f"expected 0.5 got {result2['bounce_rate']}"
+    # 2 of 3 leads have icp_score >= 70
+    assert result2["icp_match_rate"] == round(2/3, 4), f"expected {round(2/3,4)} got {result2['icp_match_rate']}"
+    print(f"  reply_rate={result2['reply_rate']} bounce_rate={result2['bounce_rate']} icp_match_rate={result2['icp_match_rate']}  PASS")
+    assert result2["llm_cost_usd"] == 0.0042
+    print(f"  llm_cost_usd={result2['llm_cost_usd']}  PASS")
+
+    # divide-by-zero safe (sent=0, found=0)
+    result3 = main(found=0, enriched=0, sent=0, queued=0)
+    assert result3["reply_rate"] == 0.0
+    assert result3["bounce_rate"] == 0.0
+    assert result3["icp_match_rate"] == 0.0
+    print("  divide-by-zero safe (sent=0, found=0): PASS")
 
     # funding_bracket boundaries
     assert funding_bracket(None) == "unknown"

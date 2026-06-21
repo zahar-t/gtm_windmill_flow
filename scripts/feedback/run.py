@@ -3,7 +3,7 @@
 The feedback loop runs on TWO cadences, both separate from the daily 8am
 intake→send pipeline:
 
-  action="poll"  — drain outcomes (SendGrid activity + inbound replies) into
+  action="poll"  — drain outcomes (Instantly activity + inbound replies) into
                    leads.outcome. Cheap; schedule frequently (hourly).
   action="train" — retrain the reply-probability model from labelled outcomes
                    and persist to the models table. Schedule weekly (Monday),

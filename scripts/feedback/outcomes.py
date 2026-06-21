@@ -23,6 +23,7 @@ from scripts.common import supabase
 from scripts.common import log as common_log
 from scripts.common import slack
 from scripts.common import instantly
+from scripts.common.reply_classify import classify as _classify_reply
 
 # ---------------------------------------------------------------------------
 # Re-trigger classifier — deterministic keyword rules (Area 4 ADD 3)
@@ -231,18 +232,29 @@ def _drain_inbound(limit: int) -> dict:
                     # stage AND notify a human now — instead of waiting for the
                     # daily flow (which would delay the handoff by up to ~24h).
 
-                    # Re-trigger classifier: detect deferral intent in the reply text
+                    # Reply body / subject for classifiers
                     reply_text = (
                         (event.get("payload") or {}).get("text")
                         or event.get("subject")
                         or ""
                     )
+                    reply_subject = event.get("subject") or ""
+
+                    # Classify the reply intent (Task 1)
+                    reply_class = _classify_reply(reply_subject, reply_text)
+
+                    # unsubscribe → flip outcome to 'unsubscribe' so dedup
+                    # permanently suppresses (config.SUPPRESS_OUTCOMES includes it)
+                    outcome_value = "unsubscribe" if reply_class == "unsubscribe" else "reply"
+
+                    # Re-trigger classifier: detect deferral intent (ooo / not_now)
                     retrigger = classify_retrigger(reply_text)
 
                     update_payload: dict = {
-                        "outcome": "reply",
+                        "outcome": outcome_value,
                         "outcome_at": _now_iso(),
                         "stage": "replied",
+                        "reply_class": reply_class,
                     }
                     if retrigger:
                         reason, days = retrigger
@@ -264,7 +276,8 @@ def _drain_inbound(limit: int) -> dict:
                                     "lead_id": lead["id"],
                                     "type": "outcome",
                                     "payload": {
-                                        "outcome": "reply",
+                                        "outcome": outcome_value,
+                                        "reply_class": reply_class,
                                         "source": "instantly_reply",
                                     },
                                 },
@@ -272,8 +285,12 @@ def _drain_inbound(limit: int) -> dict:
                         except Exception:
                             pass
                     # Event-driven handoff — shoot it straight to Slack.
+                    # For 'interested' replies, use a dedicated highlight alert.
                     try:
-                        slack.post_reply(lead)
+                        if reply_class == "interested":
+                            slack.post_interested_reply(lead)
+                        elif reply_class != "unsubscribe":
+                            slack.post_reply(lead)
                     except Exception:
                         pass
                     replies += 1

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.common import config, exa, log
+from scripts.common import config, exa, log, node
 
 
 def main(icp_query: str = "", limit: int = 10) -> list[dict[str, Any]]:
@@ -34,6 +34,15 @@ def main(icp_query: str = "", limit: int = 10) -> list[dict[str, Any]]:
     results = exa.discover_companies(q, limit)
 
     leads: list[dict[str, Any]] = []
+
+    def _emit(lead: dict[str, Any]) -> None:
+        if node.has_identity(lead):
+            leads.append(lead)
+        else:
+            node.dead_letter("intake/web_search", node.NO_IDENTITY, lead,
+                             detail="no email/linkedin/domain")
+            node.record_run("intake/web_search", lead, node.STATUS_QUARANTINED)
+
     for r in results:
         try:
             lead: dict[str, Any] = {
@@ -48,9 +57,9 @@ def main(icp_query: str = "", limit: int = 10) -> list[dict[str, Any]]:
                 "signal": None,
                 "_errors": [],
             }
-            leads.append(lead)
+            _emit(lead)
         except Exception as exc:
-            leads.append({
+            _emit({
                 "name": None,
                 "company": None,
                 "company_url": None,

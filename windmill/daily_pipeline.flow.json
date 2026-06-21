@@ -56,7 +56,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email import postmaster\n\ndef main(event: dict = None):\n    # Webhook (one inbound visitor): read the CACHED reputation verdict - a\n    # live pull + Slack alert per event would be heavy and noisy. Scheduled\n    # 8am batch: pull fresh and flag failing domains before any send rides on it.\n    return postmaster.latest_verdict() if event else postmaster.main()\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.email import postmaster\n\ndef main(event: dict = None):\n    # Webhook (one inbound visitor): read the CACHED reputation verdict - a\n    # live pull + Slack alert per event would be heavy and noisy. Scheduled\n    # 8am batch: pull fresh and flag failing domains before any send rides on it.\n    return postmaster.latest_verdict() if event else postmaster.main()\n",
           "language": "python3",
           "input_transforms": {
             "event": {
@@ -321,7 +321,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.waterfall import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.enrich.waterfall import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -344,7 +344,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.signals import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.enrich.signals import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -367,7 +367,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.enrich.company import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.enrich.company import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -392,7 +392,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
+          "content": "#requirements:\n#httpx\n#anthropic\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
           "language": "python3",
           "input_transforms": {
             "branches": {
@@ -404,15 +404,31 @@
         "summary": "Enrich \u2014 merge dimensions"
       },
       {
-        "id": "score_icp",
+        "id": "enrich_completeness",
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.score.icp import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.enrich.completeness import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
               "expr": "results.enrich_merge",
+              "type": "javascript"
+            }
+          }
+        },
+        "summary": "Enrich \u2014 completeness gate (quarantine leads with no company AND no domain)"
+      },
+      {
+        "id": "score_icp",
+        "value": {
+          "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
+          "type": "rawscript",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.score.icp import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "language": "python3",
+          "input_transforms": {
+            "leads": {
+              "expr": "results.enrich_completeness",
               "type": "javascript"
             }
           }
@@ -440,7 +456,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.dedup import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.crm.dedup import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
@@ -456,7 +472,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.score.route import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.score.route import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
@@ -512,7 +528,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.personalize.hot import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.personalize.hot import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -535,7 +551,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.personalize.warm import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.personalize.warm import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -560,7 +576,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
+          "content": "#requirements:\n#httpx\n#anthropic\ndef main(branches: list = None):\n    branches = [b for b in (branches or []) if isinstance(b, list)]\n    if not branches:\n        return []\n    base = branches[0]\n    for other in branches[1:]:\n        for i in range(min(len(base), len(other))):\n            src, dst = other[i], base[i]\n            if not isinstance(src, dict) or not isinstance(dst, dict):\n                continue\n            for k, v in src.items():\n                if k == '_errors':\n                    continue\n                empty = (None, '', [], {})\n                if k not in dst or (dst.get(k) in empty and v not in empty):\n                    dst[k] = v\n            for e in src.get('_errors', []) or []:\n                dst.setdefault('_errors', [])\n                if e not in dst['_errors']:\n                    dst['_errors'].append(e)\n    return base\n",
           "language": "python3",
           "input_transforms": {
             "branches": {
@@ -648,7 +664,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email.send import main as run\n\ndef main(leads: list = None, reputation: dict = None):\n    return run(leads, reputation)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.email.send import main as run\n\ndef main(leads: list = None, reputation: dict = None):\n    return run(leads, reputation)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
@@ -668,7 +684,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.email.log import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.email.log import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
@@ -684,7 +700,7 @@
         "value": {
           "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
           "type": "rawscript",
-          "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.upsert import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+          "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.crm.upsert import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
           "language": "python3",
           "input_transforms": {
             "leads": {
@@ -708,7 +724,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.crm.handoff import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.crm.handoff import main as run\n\ndef main(leads: list = None):\n    return run(leads)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {
@@ -731,7 +747,7 @@
                   "value": {
                     "lock": "# workspace-dependencies-mode: manual\n# py: 3.12\nannotated-types==0.7.0\nanthropic==0.109.2\nanyio==4.14.0\ncertifi==2026.5.20\ncffi==2.0.0\ncryptography==49.0.0\ndistro==1.9.0\ndocstring-parser==0.18.0\nh11==0.16.0\nhttpcore==1.0.9\nhttpx==0.28.1\nidna==3.18\njiter==0.15.0\nmarkupsafe==3.0.3\npycparser==3.0\npydantic==2.13.4\npydantic-core==2.46.4\npython-http-client==3.3.7\nsendgrid==6.12.5\nsniffio==1.3.1\ntyping-extensions==4.15.0\ntyping-inspection==0.4.2\nwerkzeug==3.1.8",
                     "type": "rawscript",
-                    "content": "#requirements:\n#httpx\n#anthropic\n#sendgrid\n#certifi\nfrom scripts.report.daily_summary import main as run\n\ndef main(leads: list = None):\n    leads = leads or []\n    found = len(leads)\n    enriched = sum(1 for l in leads if l.get('email') or l.get('signal') or l.get('company_size'))\n    sent = sum(1 for l in leads if l.get('stage') == 'contacted')\n    queued = sum(1 for l in leads if l.get('stage') == 'warm')\n    return run(found=found, enriched=enriched, sent=sent, queued=queued)\n",
+                    "content": "#requirements:\n#httpx\n#anthropic\nfrom scripts.report.daily_summary import main as run\n\ndef main(leads: list = None):\n    leads = leads or []\n    found = len(leads)\n    enriched = sum(1 for l in leads if l.get('email') or l.get('signal') or l.get('company_size'))\n    sent = sum(1 for l in leads if l.get('stage') == 'contacted')\n    queued = sum(1 for l in leads if l.get('stage') == 'warm')\n    return run(found=found, enriched=enriched, sent=sent, queued=queued)\n",
                     "language": "python3",
                     "input_transforms": {
                       "leads": {

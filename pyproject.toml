@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "llm: LLM-judge tests (need ANTHROPIC_API_KEY + deepeval)",
+    "integration: requires live Supabase/Instantly credentials",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::UserWarning:pydantic",
+]
+# deepeval 4.x loads its pytest plugin cleanly (the 1.5.5 langchain.schema crash
+# is gone), so no plugin workaround is needed. The G-Eval tests still skip
+# gracefully (see tests/llm/test_copy_geval.py) when deepeval or
+# ANTHROPIC_API_KEY is absent, so the deterministic suite always runs.

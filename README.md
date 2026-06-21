@@ -31,7 +31,8 @@ flowchart TD
     T(["Triggers — daily cron · visitor webhook · funding event · LinkedIn poll"]) --> R["Reputation gate<br/>postmaster: pause / throttle send by domain health"]
     R --> I["Intake<br/>funding feed · web search (Exa) · LinkedIn (Apify) · site + LinkedIn visitors"]
     I --> E["Enrich<br/>email waterfall (Hunter → Apollo → PDL) · signals (recency) · firmographics"]
-    E --> SC["Score<br/>ICP rubric 0-100 → dedup + suppression → priority (recency × strength) → route"]
+    E --> EC["Completeness gate<br/>quarantine leads with no company AND no domain"]
+    EC --> SC["Score<br/>ICP rubric 0-100 → dedup + suppression → priority (recency × strength) → route"]
     SC --> V["Validate email<br/>ZeroBounce"]
     V --> CH{"Channel router"}
     CH -->|"investor relationship"| INTRO["Warm intro<br/>Slack handoff"]
@@ -48,11 +49,9 @@ flowchart TD
 
 > Every node has a typed input/output contract, a self-validating QA gate, an explicit Supabase `pipeline_state` transition (idempotent + resumable cron), and quarantines bad records to a `dead_letter` table. A record that fails a gate is never silently dropped or passed downstream.
 
-**Every node** has a typed input/output contract, a self-validating QA gate, an explicit Supabase `pipeline_state` transition (so the cron is idempotent and resumable), and quarantines bad records to a `dead_letter` table. A record that fails a gate is never silently dropped or passed downstream.
-
 ## What makes it production-grade
 
-- **QA at every node, not just at the end.** Each stage validates its own output before handing off (schema / regex / threshold checks, plus LLM-as-judge for the copy nodes). A failing record is quarantined with the node, reason, and payload.
+- **QA at every node, not just at the end.** Each stage validates its own output before handing off (schema / regex / threshold checks, plus LLM-as-judge for the copy nodes). A failing record is quarantined to the `dead_letter` table with the node, reason code, and a trimmed payload, and every node records a QA-evidence row in `node_runs` — never silently dropped, never passed downstream. An enrichment **completeness gate** quarantines leads that arrive at scoring with no company and no domain, so the rubric never floor-scores an unscoreable record.
 - **Typed contracts.** A single Pydantic `Lead` model is the contract between nodes (`scripts/common/contracts.py`); lenient on ingest, strict at the gates.
 - **Idempotent and resumable.** Every lead carries a `pipeline_state` cursor; a node only acts on records in its input state and advances them out of it, so a re-run never double-processes and a crashed cron resumes where it stopped.
 - **No double-sends.** The send node uses a claim → send → confirm → reconcile pattern, so a send is at-most-once even if a result-persist fails mid-run.
@@ -100,11 +99,21 @@ scripts/
   personalize/ hot / warm / follow-up copywriters + value-hook builder
   email/       spam + compliance gate, email validation, send, warmup, postmaster
   crm/         dedup + suppression, upsert, lifecycle, Slack handoff, reply handling
-  report/      daily metrics
+  report/      daily metrics (counts, pipeline value, reply/bounce/ICP-match rates, LLM cost)
   sql/         schema + migrations
+tests/         deterministic node gate suite (pytest, no network) + import-guarded LLM G-Eval
 windmill/      the orchestration flow(s) as OpenFlow JSON
 ```
 
+## Tests
+
+```bash
+pip install pytest respx
+pytest -q
+```
+
+A deterministic, network-free gate suite covers every node: scoring, routing, dedup, validation, spam, priority, channel, send idempotency, the node envelope (quarantine / dead-letter / QA evidence), reply classification, the completeness gate, and a demo-pipeline invariant. Tests hit no network (respx / monkeypatch) and are reproducible. The optional LLM-as-judge (G-Eval) copy tests skip automatically when `deepeval` or `ANTHROPIC_API_KEY` is absent, so the deterministic suite always runs green. CI runs the suite plus the `--demo` invariant on every push (`.github/workflows/ci.yml`).
+
 ## Status
 
-A working reference implementation. The architecture (contracts, state machine, dead-letter, QA gates) is in place; a DeepEval/pytest gate suite and full migration of every node into the formal envelope are the next milestones.
+A working reference implementation. The architecture (contracts, state machine, dead-letter quarantine, per-node QA evidence, completeness gate, reply classification, per-run LLM-cost accounting) is in place, every node is wrapped in the formal envelope, and a deterministic pytest gate suite (plus import-guarded DeepEval copy gates) runs in CI.

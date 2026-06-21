@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from scripts.common import config, log, slack
+from scripts.common.reply_classify import classify as _classify_reply
 from scripts.feedback.outcomes import classify_retrigger
 
 try:
@@ -70,15 +71,23 @@ def main(event: dict | None = None) -> dict:
 
     now = _now_iso()
     try:
-        # Re-trigger classifier: detect deferral intent in the reply text
-        reply_text = event.get("text") or event.get("subject") or ""
+        # Classify the reply intent (Task 1)
+        reply_subject = event.get("subject") or ""
+        reply_text = event.get("text") or reply_subject
+        reply_class = _classify_reply(reply_subject, reply_text)
+
+        # unsubscribe → flip outcome so dedup permanently suppresses
+        outcome_value = "unsubscribe" if reply_class == "unsubscribe" else "reply"
+
+        # Re-trigger classifier: detect deferral intent (ooo / not_now)
         retrigger = classify_retrigger(reply_text)
 
         update_payload: dict = {
-            "outcome": "reply",
+            "outcome": outcome_value,
             "outcome_at": now,
             "stage": "replied",
             "updated_at": now,
+            "reply_class": reply_class,
         }
         if retrigger:
             reason, days = retrigger
@@ -96,11 +105,19 @@ def main(event: dict | None = None) -> dict:
             _supabase.insert(
                 "activity",
                 {"lead_id": lead["id"], "type": "reply",
-                 "payload": {"source": "instantly_reply_webhook", "at": now}},
+                 "payload": {
+                     "source": "instantly_reply_webhook",
+                     "reply_class": reply_class,
+                     "at": now,
+                 }},
             )
         except Exception:
             pass
-        slack.post_reply(lead)
+        # 'interested' gets a dedicated highlight alert; unsub → no Slack noise
+        if reply_class == "interested":
+            slack.post_interested_reply(lead)
+        elif reply_class != "unsubscribe":
+            slack.post_reply(lead)
     except Exception as exc:
         return {"handled": 0, "reason": f"error:{exc}", "from": frm}
 

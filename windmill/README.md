@@ -29,8 +29,8 @@ Both flows ship with `"enabled": false` and the whole loop is gated by
    Windmill worker image / dependencies.
 3. Set the Windmill Variable `ENABLE_FEEDBACK_LOOP=true`.
 4. Set `enabled: true` on each schedule (or toggle in the UI).
-5. For replies: point an MX subdomain at SendGrid Inbound Parse and send with a
-   `Reply-To` on that subdomain, so replies land in `inbound_email_events`.
+5. For replies: configure an inbound parse webhook and send with a `Reply-To`
+   on a subdomain so replies land in `inbound_email_events`.
 
 Don't enable `train` until the `outcomes` poller has accumulated **≥50 labelled
 leads** (`SELECT count(*) FROM leads WHERE outcome IS NOT NULL`). Until then
@@ -56,4 +56,4 @@ shape against your Windmill version on import. Two paths:
 
 All read from the environment (Windmill Variables), no new **required** vars:
 `ENABLE_FEEDBACK_LOOP` (new, opt-in), `SUPABASE_URL`, `SUPABASE_KEY`,
-`SENDGRID_API_KEY` (needs the *Email Activity* scope for the poller).
+`INSTANTLY_API_KEY` (needs campaign analytics scope for the outcomes poller).

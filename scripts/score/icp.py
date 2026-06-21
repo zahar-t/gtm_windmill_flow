@@ -23,7 +23,7 @@ Full thesis + weights live in score/icp_rubric.py.
 """
 from __future__ import annotations
 
-from scripts.common import claude, log
+from scripts.common import claude, log, node
 from scripts.score import icp_rubric
 
 # ---------------------------------------------------------------------------
@@ -161,11 +161,18 @@ def main(leads: list[dict] | None = None) -> list[dict]:
             scored_count += 1
             score_total += result.score
 
+            if 0 <= int(result.score) <= 100:
+                node.record_run("score/icp", lead, node.STATUS_PASSED)
+            else:                                   # defensive: rubric/contract should prevent this
+                node.quarantine(lead, "score/icp", node.SCORE_OUT_OF_RANGE,
+                                detail=f"score={result.score}")
+
         except Exception as exc:  # belt-and-suspenders
             lead.setdefault("_errors", []).append(f"icp.py: {exc}")
             lead["icp_score"] = 0
             lead["icp_tier"] = "DQ"
             lead["icp_reasoning"] = ""
+            node.record_run("score/icp", lead, node.STATUS_SKIPPED)   # evidence; lead still flows
 
     avg = round(score_total / scored_count, 1) if scored_count else 0
 

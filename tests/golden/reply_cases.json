@@ -1,0 +1,16 @@
+[
+  {"subject": "Re: Quick note", "body": "Please unsubscribe me from your list.", "expected": "unsubscribe"},
+  {"subject": null, "body": "Opt out please, remove me from this mailing list.", "expected": "unsubscribe"},
+  {"subject": "Out of Office: Re: Quick note", "body": "I am out of the office until Monday.", "expected": "ooo"},
+  {"subject": null, "body": "Auto-reply: I am currently out and will be back on June 30.", "expected": "ooo"},
+  {"subject": "Re: Quick note", "body": "Sounds interesting, let's set up a call!", "expected": "interested"},
+  {"subject": null, "body": "I'd love to learn more — can we hop on a 15-min call?", "expected": "interested"},
+  {"subject": "Re:", "body": "Not right now, but circle back next quarter.", "expected": "not_now"},
+  {"subject": null, "body": "After the funding round closes, reach out again.", "expected": "not_now"},
+  {"subject": "Re: Quick note", "body": "Thanks but not interested.", "expected": "negative"},
+  {"subject": null, "body": "We already have a solution in place, no thank you.", "expected": "negative"},
+  {"subject": "Re: Quick note", "body": "What is the pricing structure?", "expected": "question"},
+  {"subject": null, "body": "How does your platform integrate with Salesforce?", "expected": "question"},
+  {"subject": null, "body": null, "expected": "other"},
+  {"subject": "", "body": "", "expected": "other"}
+]

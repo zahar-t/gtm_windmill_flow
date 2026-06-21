@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from scripts.common import config, log
+from scripts.common import config, log, node
 from scripts.common import funding
 
 
@@ -56,6 +56,15 @@ def main(since_days: int = 7, limit: int = 25) -> list[dict[str, Any]]:
         return []
 
     leads: list[dict[str, Any]] = []
+
+    def _emit(lead: dict[str, Any]) -> None:
+        if node.has_identity(lead):
+            leads.append(lead)
+        else:
+            node.dead_letter("intake/funding", node.NO_IDENTITY, lead,
+                             detail="no email/linkedin/domain")
+            node.record_run("intake/funding", lead, node.STATUS_QUARANTINED)
+
     for r in rounds:
         try:
             company = r.get("company") or "Unknown"
@@ -104,9 +113,9 @@ def main(since_days: int = 7, limit: int = 25) -> list[dict[str, Any]]:
                 "months_since_last_funding": _months_since(announced_at),
                 "_errors": [],
             }
-            leads.append(lead)
+            _emit(lead)
         except Exception as exc:
-            leads.append({"company": None, "source": "funding_feed", "_errors": [str(exc)]})
+            _emit({"company": None, "source": "funding_feed", "_errors": [str(exc)]})
 
     try:
         log.log_stage("intake/funding", {"found": len(leads)})

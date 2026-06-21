@@ -11,7 +11,7 @@ through unvalidated (email_valid stays None).
 """
 from __future__ import annotations
 
-from scripts.common import config, log
+from scripts.common import config, log, node
 from scripts.common.http import get_json
 
 # Provider statuses we treat as undeliverable.
@@ -90,6 +90,11 @@ def main(leads: list[dict] | None = None) -> list[dict]:
             lead["_skip_reason"] = f"email_invalid:{res['verdict']}"
             lead["stage"] = "cold"           # demote: not personalized, not sent
             invalid += 1
+            node.dead_letter("email/validate", node.EMAIL_INVALID, lead,
+                             detail=f"verdict={res['verdict']}")
+            node.record_run("email/validate", lead, node.STATUS_QUARANTINED)
+        else:
+            node.record_run("email/validate", lead, node.STATUS_PASSED)
 
     try:
         log.log_stage("email/validate", {"checked": checked, "invalid": invalid})
