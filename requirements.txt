@@ -11,4 +11,4 @@ numpy==2.1.3           # transitive sklearn dep; pinned for determinism
 # --- dev / test ---
 pytest==8.3.4
 respx==0.22.0          # httpx request mocking
-deepeval==1.5.5        # LLM-as-judge gates (Writer + Copy-QA + reply classification)
+deepeval==4.0.6        # LLM-as-judge gates (local/keyed extra); 4.x imports cleanly (1.5.5 had a broken langchain.schema dep). NOT installed in CI — see .github/workflows/ci.yml

@@ -28,7 +28,13 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # deepeval is a heavy, key-dependent extra and its G-Eval tests skip in CI
+        # (no ANTHROPIC_API_KEY), so install everything EXCEPT deepeval and run the
+        # deterministic gate suite. Locally, `pip install -r requirements.txt`
+        # includes deepeval 4.0.6 to enable the G-Eval gates with a key.
+        run: |
+          grep -v '^deepeval' requirements.txt > ci-requirements.txt
+          pip install -r ci-requirements.txt
 
       - name: Run deterministic test suite
         # LLM/G-Eval tests auto-skip without ANTHROPIC_API_KEY.
